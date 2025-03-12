@@ -2,11 +2,12 @@ import sqlite3
 import os
 import requests
 from concurrent.futures import ThreadPoolExecutor
+from tqdm import tqdm  # Для отображения прогресса
 
 # Настройки скачивания
 DOWNLOAD_DIR = "downloads"  # Папка для сохранения файлов
-THREADS = 4  # Количество потоков
-LIMIT = 20  # Сколько файлов скачать (0 = все)
+THREADS = 10  # Количество потоков
+LIMIT = 99999999999999999  # Сколько файлов скачать (99999999999999999 = все)
 
 # Создаём папку для загрузок
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
@@ -31,7 +32,7 @@ conn.close()
 
 print(f"Найдено {len(links)} файлов для скачивания.")
 
-# Функция скачивания
+# Функция скачивания с прогрессом
 def download_file(url, name):
     # Добавляем https: если ссылка начинается с //
     if url.startswith("//"):
@@ -45,17 +46,41 @@ def download_file(url, name):
         response = requests.get(url, stream=True)
         response.raise_for_status()  # Проверяем ошибки
 
+        total_size = int(response.headers.get("content-length", 0))  # Получаем размер файла
+        progress_bar = tqdm(total=total_size, unit="B", unit_scale=True, desc=name)
+
         with open(filepath, "wb") as f:
             for chunk in response.iter_content(1024):
                 f.write(chunk)
+                progress_bar.update(len(chunk))  # Обновляем прогресс
 
+        progress_bar.close()
         print(f"✔ {name} скачан.")
     except requests.RequestException as e:
         print(f"❌ Ошибка скачивания {name}: {e}")
 
-# Запускаем многопоточное скачивание
-with ThreadPoolExecutor(max_workers=THREADS) as executor:
-    for url, name in links:
-        executor.submit(download_file, url, name)
+# Запускаем многопоточное скачивание с общим прогрессом
+def download_all_files():
+    with ThreadPoolExecutor(max_workers=THREADS) as executor:
+        futures = []
+        total_files = len(links)
+        overall_progress = tqdm(total=total_files, desc="Общий прогресс", position=0)
 
-print("✅ Загрузка завершена!")
+        # Функция для отслеживания общего прогресса
+        def on_done(future):
+            overall_progress.update(1)
+
+        for url, name in links:
+            future = executor.submit(download_file, url, name)
+            future.add_done_callback(on_done)
+            futures.append(future)
+
+        # Ожидаем завершения всех задач
+        for future in futures:
+            future.result()
+
+        overall_progress.close()
+        print("✅ Загрузка завершена!")
+
+# Запуск процесса скачивания
+download_all_files()
