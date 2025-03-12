@@ -24,7 +24,6 @@ time.sleep(3)
 
 # Добавляем cookies в сессию
 for cookie in cookies:
-    # Приводим домен к общему виду
     if 'domain' in cookie and "passport.yandex.ru" in cookie['domain']:
         cookie['domain'] = ".yandex.ru"
     if 'expiry' in cookie and isinstance(cookie['expiry'], float):
@@ -66,39 +65,38 @@ except Exception as e:
 fetched = data.get("resources", {}).get("fetched", [])
 print(f"Найдено {len(fetched)} элементов в 'fetched'.")
 
-# Собираем ссылки из каждого элемента: meta -> sizes[0] -> url
+# Собираем ссылки и имена файлов
 links = []
 for item in fetched:
+    photo_name = item.get("name", "")  # Получаем имя файла
     meta = item.get("meta", {})
-    photo_name = item.get("name", {})
     sizes = meta.get("sizes", [])
     if sizes and isinstance(sizes, list):
-        # Берем первый элемент массива sizes и его url
         first_size = sizes[0]
         url = first_size.get("url")
         if url:
-            links.append(url)
+            links.append((url, photo_name))
 
 print(f"Извлечено ссылок: {len(links)}")
-for link in links:
-    print(link)
+for link, name in links:
+    print(f"{name}: {link}")
 
-# Сохраняем ссылки в базу данных SQLite
+# Сохраняем ссылки и имена файлов в базу данных SQLite
 conn = sqlite3.connect("links.db")
 cursor = conn.cursor()
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS links (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        url TEXT
+        url TEXT,
         name TEXT
     )
 """)
 
-for url in links:
-    cursor.execute("INSERT INTO links (url) VALUES (?)", (url,))
+for url, name in links:
+    cursor.execute("INSERT INTO links (url, name) VALUES (?, ?)", (url, name))
 
 conn.commit()
 conn.close()
 
-print("Ссылки успешно сохранены в базе данных links.db")
+print("Ссылки и имена успешно сохранены в базе данных links.db")
 driver.quit()
