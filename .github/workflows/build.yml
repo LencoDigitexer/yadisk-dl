@@ -33,9 +33,9 @@ jobs:
     
     - name: Build executables
       run: |
-        python -m pyinstaller --onefile --clean --name=ya_auth src/00auth.py
-        python -m pyinstaller --onefile --clean --name=ya_getlinks src/01getlinks.py
-        python -m pyinstaller --onefile --clean --name=ya_download src/02download.py
+        pyinstaller --onefile --clean --name=01_ya_auth src/00auth.py
+        pyinstaller --onefile --clean --name=02_ya_getlinks src/01getlinks.py
+        pyinstaller --onefile --clean --name=03_ya_download src/02download.py
     
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
