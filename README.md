@@ -74,4 +74,4 @@ pyinstaller --onefile --clean --name=ya_download src/02download.py
 
 ## 📄 Лицензия
 
-MIT License. Подробнее в файле [LICENSE](LICENSE)
+AS IS. Подробнее в файле [LICENSE](LICENSE)
