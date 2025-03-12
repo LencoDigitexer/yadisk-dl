@@ -1,6 +1,5 @@
-/id_yandex_screenshot.png
-/photos.db
-/session.pkl
+*.png
+*.db
+*.pkl
 /tmp.py
 /venv
-/yandex_session.pkl
