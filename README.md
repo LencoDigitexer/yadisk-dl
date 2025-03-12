@@ -14,7 +14,7 @@
 
 ## 📦 Скачать
 
-Последнюю версию можно скачать [здесь](https://github.com/yourname/yadisk-dl/releases/latest/download/yadisk-dl.zip).
+Последнюю версию можно скачать [здесь](https://github.com/lencodigitexer/yadisk-dl/releases/latest/download/yadisk-dl.zip).
 
 Архив содержит:
 
