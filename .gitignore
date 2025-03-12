@@ -1,6 +1,13 @@
-*.png
-*.db
+# Локальные данные
 *.pkl
-/tmp.py
-/venv
-/downloads
+*.db
+downloads/
+
+# Python
+__pycache__/
+*.py[cod]
+.env
+venv/
+
+# Системные
+.DS_Store
