@@ -2,10 +2,12 @@ import time
 import pickle
 import sqlite3
 import json
-from seleniumwire import webdriver  # Используем selenium-wire для перехвата запросов
+from seleniumwire import webdriver  # Перехват запросов
 import chromedriver_autoinstaller
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.keys import Keys
 
-# Устанавливаем ChromeDriver, если он отсутствует
+# Устанавливаем ChromeDriver, если отсутствует
 chromedriver_autoinstaller.install()
 
 # Настройки браузера
@@ -14,15 +16,15 @@ options.add_argument("--start-maximized")
 options.add_argument("--disable-blink-features=AutomationControlled")
 driver = webdriver.Chrome(options=options)
 
-# Загружаем сохранённые cookies из session.pkl
+# Загружаем cookies
 with open("session.pkl", "rb") as f:
     cookies = pickle.load(f)
 
-# Открываем страницу входа Яндекса для установки cookies
+# Открываем страницу входа Яндекса
 driver.get("https://passport.yandex.ru")
 time.sleep(3)
 
-# Добавляем cookies в сессию
+# Устанавливаем cookies
 for cookie in cookies:
     if 'domain' in cookie and "passport.yandex.ru" in cookie['domain']:
         cookie['domain'] = ".yandex.ru"
@@ -33,70 +35,82 @@ for cookie in cookies:
     except Exception as e:
         print("Не удалось добавить cookie:", cookie, e)
 
-# Переходим на страницу с фотографиями на Яндекс.Диске
+# Переход на страницу с фотографиями
 driver.get("https://disk.yandex.ru/client/photo")
-time.sleep(5)  # Ждем загрузки страницы и выполнения запросов
+time.sleep(5)
 
-# Задаем целевой URL запроса
-target_url = "https://disk.yandex.ru/models-v2?m=intapi/photo-get-clusters-with-resources"
-
-# Ищем нужный запрос среди перехваченных
-target_request = None
-for request in driver.requests:
-    if target_url in request.url and request.response:
-        target_request = request
-        break
-
-if target_request is None:
-    print("Запрос не найден или ответ отсутствует.")
-    driver.quit()
-    exit(1)
-
-# Декодируем тело ответа
-try:
-    response_body = target_request.response.body.decode('utf-8', errors='ignore')
-    data = json.loads(response_body)
-except Exception as e:
-    print("Ошибка при разборе ответа:", e)
-    driver.quit()
-    exit(1)
-
-# Извлекаем список элементов из resources -> fetched
-fetched = data.get("resources", {}).get("fetched", [])
-print(f"Найдено {len(fetched)} элементов в 'fetched'.")
-
-# Собираем ссылки и имена файлов
-links = []
-for item in fetched:
-    photo_name = item.get("name", "")  # Получаем имя файла
-    meta = item.get("meta", {})
-    sizes = meta.get("sizes", [])
-    if sizes and isinstance(sizes, list):
-        first_size = sizes[0]
-        url = first_size.get("url")
-        if url:
-            links.append((url, photo_name))
-
-print(f"Извлечено ссылок: {len(links)}")
-for link, name in links:
-    print(f"{name}: {link}")
-
-# Сохраняем ссылки и имена файлов в базу данных SQLite
+# Настройка базы данных
 conn = sqlite3.connect("links.db")
 cursor = conn.cursor()
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS links (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        url TEXT,
+        url TEXT UNIQUE,
         name TEXT
     )
 """)
-
-for url, name in links:
-    cursor.execute("INSERT INTO links (url, name) VALUES (?, ?)", (url, name))
-
 conn.commit()
-conn.close()
 
-print("Ссылки и имена успешно сохранены в базе данных links.db")
+# Функция обработки запроса
+def process_request(request):
+    try:
+        response_body = request.response.body.decode('utf-8', errors='ignore')
+        data = json.loads(response_body)
+
+        fetched = data.get("resources", {}).get("fetched", [])
+        new_links = []
+
+        for item in fetched:
+            meta = item.get("meta", {})
+            photo_name = item.get("name", "")
+            sizes = meta.get("sizes", [])
+
+            if sizes and isinstance(sizes, list):
+                first_size = sizes[0]
+                url = first_size.get("url")
+
+                if url:
+                    new_links.append((url, photo_name))
+
+        # Добавляем только новые ссылки
+        cursor.executemany("INSERT OR IGNORE INTO links (url, name) VALUES (?, ?)", new_links)
+        conn.commit()
+
+        print(f"Добавлено {len(new_links)} новых ссылок.")
+
+    except Exception as e:
+        print("Ошибка при обработке запроса:", e)
+
+# Прокрутка с эмуляцией колеса мыши
+SCROLL_PAUSE_TIME = 0.01
+previous_requests = set()
+actions = ActionChains(driver)
+
+while True:
+    
+
+    # Проверяем новые запросы
+    new_requests = 0
+    for request in driver.requests:
+        if request.url.startswith("https://disk.yandex.ru/models-v2?m=intapi/photo-get-clusters-with-resources"):
+            if request.id not in previous_requests and request.response:
+                previous_requests.add(request.id)
+                process_request(request)
+                new_requests += 1
+
+    # Медленная прокрутка вниз (эмуляция колеса мыши)
+    for _ in range(3):  # Делаем 3 небольших прокрутки
+        actions.send_keys(Keys.PAGE_DOWN).perform()
+        time.sleep(0.01)
+
+    time.sleep(SCROLL_PAUSE_TIME)  # Ждём загрузки новых данных
+
+    
+    # Если за несколько итераций нет новых данных, завершаем
+    if new_requests == 0:
+        print("Новых данных нет, прекращаем работу.")
+        
+
+# Закрываем соединение
+conn.close()
 driver.quit()
